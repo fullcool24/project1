@@ -109,6 +109,8 @@ class PixelEncoder(nn.Module):
 		self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
 		self.ln = nn.LayerNorm(self.feature_dim)
 
+		print('/')
+
 	def forward_conv(self, obs, detach=False):
 		obs = self.preprocess(obs)
 		conv = torch.relu(self.convs[0](obs))
@@ -145,42 +147,95 @@ class PixelDecoder(nn.Module):
 		self.feature_dim = feature_dim
 		self.num_layers = num_layers
 		self.num_shared_layers = num_shared_layers
+		self.out_dim = OUT_DIM[num_layers]
 
-		self.convs = nn.ModuleList(
+		self.fc = nn.Linear(
+			feature_dim, num_filters * self.out_dim * self.out_dim
+		)
+
+		self.deconvs = nn.ModuleList(
 			[nn.ConvTranspose2d(obs_shape[0], num_filters, 3, stride=2)]
 		)
-		for i in range(num_layers - 1):
-			self.convs.append(nn.ConvTranspose2d(num_filters, num_filters, 3, stride=1))
+		for i in range(self.num_layers - 1):
+			self.deconvs.append(
+				nn.ConvTranspose2d(num_filters, num_filters, 3, stride=1)
+				)
+		self.deconvs.append(
+			nn.ConvTranspose2d(num_filters, obs_shape[0], 3, stride=2, output_padding=1)
+		)
 
-		out_dim = OUT_DIM[num_layers]
-		self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
 		self.ln = nn.LayerNorm(self.feature_dim)
 
-	def forward_conv(self, obs, detach=False):
-		conv = torch.relu(self.convs[0](obs))
+		self.outputs = dict()
 
-		for i in range(1, self.num_layers):
-			conv = torch.relu(self.convs[i](conv))
-			if i == self.num_shared_layers-1 and detach:
-				conv = conv.detach()
+	def forward(self, h):
+		h = torch.relu(self.fc(h))
+		self.outputs['fc'] = h
 
-		h = conv.view(conv.size(0), -1)
-		return h
+		deconv = h.view(-1, self.num_filters, self.out_dim, self.out_dim)
+		self.outputs['deconv1'] = deconv
 
-	def forward(self, obs, detach=False):
-		h = self.forward_conv(obs, detach)
-		h_fc = self.fc(h)
-		h_norm = self.ln(h_fc)
-		out = torch.tanh(h_norm)
+		for i in range(0, self.num_layers - 1):
+			deconv = torch.relu(self.deconvs[i](deconv))
+			self.outputs['deconv%s' % (i + 1)] = deconv
 
-		return out
+		obs = self.deconvs[-1](deconv)
+		self.outputs['obs'] = obs
 
-	def copy_conv_weights_from(self, source, n=None):
-		"""Tie n first convolutional layers"""
-		if n is None:
-			n = self.num_layers
-		for i in range(n):
-			tie_weights(src=source.convs[i], trg=self.convs[i])
+		return obs
+
+	def log(self, L, step, log_freq):
+		if step % log_freq != 0:
+			return
+
+		for k, v in self.outputs.items():
+			L.log_histogram('train_decoder/%s_hist' % k, v, step)
+			if len(v.shape) > 2:
+				L.log_image('train_decoder/%s_i' % k, v[0], step)
+
+		for i in range(self.num_layers):
+			L.log_param(
+				'train_decoder/deconv%s' % (i + 1), self.deconvs[i], step
+			)
+		L.log_param('train_decoder/fc', self.fc, step)
+
+_AVAILABLE_DECODERS = {'pixel': PixelDecoder}
+
+
+
+
+
+		# out_dim = OUT_DIM[num_layers]
+		# self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
+	# 	self.ln = nn.LayerNorm(self.feature_dim)
+
+	# 	self.outputs = dict()
+
+	# def forward_conv(self, obs, detach=False):
+	# 	conv = torch.relu(self.convs[0](obs))
+
+	# 	for i in range(1, self.num_layers):
+	# 		conv = torch.relu(self.convs[i](conv))
+	# 		if i == self.num_shared_layers-1 and detach:
+	# 			conv = conv.detach()
+
+	# 	h = conv.view(conv.size(0), -1)
+	# 	return h
+
+	# def forward(self, obs, detach=False):
+	# 	h = self.forward_conv(obs, detach)
+	# 	h_fc = self.fc(h)
+	# 	h_norm = self.ln(h_fc)
+	# 	out = torch.tanh(h_norm)
+
+	# 	return out
+
+	# def copy_conv_weights_from(self, source, n=None):
+	# 	"""Tie n first convolutional layers"""
+	# 	if n is None:
+	# 		n = self.num_layers
+	# 	for i in range(n):
+	# 		tie_weights(src=source.convs[i], trg=self.convs[i])
 
 # Defining Parameters
 
@@ -221,14 +276,15 @@ from_enc = encoder(dummy)
 # model(dummy)
 
 def make_decoder(
-	obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
+	decoder_type, obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
 ):
+	assert decoder_type in _AVAILABLE_DECODERS
 	assert num_layers in OUT_DIM.keys(), 'invalid number of layers'
 	if num_shared_layers == -1 or num_shared_layers == None:
 		num_shared_layers = num_layers
 	assert num_shared_layers <= num_layers and num_shared_layers > 0, \
 		f'invalid number of shared layers, received {num_shared_layers} layers'
-	return PixelDecoder(
+	return _AVAILABLE_DECODERS[decoder_type](
 		obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
 	)
 
