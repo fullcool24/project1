@@ -137,10 +137,10 @@ class PixelEncoder(nn.Module):
 			tie_weights(src=source.convs[i], trg=self.convs[i])
 
 class PixelDecoder(nn.Module):
-	"""Convolutional encoder of pixel observations"""
+	"""Convolutional decoder of pixel observations"""
 	def __init__(self, obs_shape, feature_dim, num_layers=4, num_filters=32, num_shared_layers=4):
 		super().__init__()
-		assert len(obs_shape) == 3
+		# assert len(obs_shape) == 3
 
 		self.feature_dim = feature_dim
 		self.num_layers = num_layers
