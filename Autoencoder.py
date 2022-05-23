@@ -147,10 +147,10 @@ class PixelDecoder(nn.Module):
 		self.num_shared_layers = num_shared_layers
 
 		self.convs = nn.ModuleList(
-			[nn.Conv2d(obs_shape[0], num_filters, 3, stride=2)]
+			[nn.ConvTranspose2d(obs_shape[0], num_filters, 3, stride=2)]
 		)
 		for i in range(num_layers - 1):
-			self.convs.append(nn.Conv2d(num_filters, num_filters, 3, stride=1))
+			self.convs.append(nn.ConvTranspose2d(num_filters, num_filters, 3, stride=1))
 
 		out_dim = OUT_DIM[num_layers]
 		self.fc = nn.Linear(num_filters * out_dim * out_dim, self.feature_dim)
