@@ -153,9 +153,8 @@ class PixelDecoder(nn.Module):
 			feature_dim, num_filters * self.out_dim * self.out_dim
 		)
 
-		self.deconvs = nn.ModuleList(
-			[nn.ConvTranspose2d(obs_shape[0], num_filters, 3, stride=2)]
-		)
+		self.deconvs = nn.ModuleList()
+
 		for i in range(self.num_layers - 1):
 			self.deconvs.append(
 				nn.ConvTranspose2d(num_filters, num_filters, 3, stride=1)
@@ -164,7 +163,7 @@ class PixelDecoder(nn.Module):
 			nn.ConvTranspose2d(num_filters, obs_shape[0], 3, stride=2, output_padding=1)
 		)
 
-		self.ln = nn.LayerNorm(self.feature_dim)
+		# self.ln = nn.LayerNorm(self.feature_dim)
 
 		self.outputs = dict()
 
@@ -300,8 +299,9 @@ num_filters=32
 # print(from_enc.shape)
 # quit()
 
-decoder = make_decoder(obs_shape, decoder_feature_dim, num_layers,
-            num_filters, num_shared_layers)
+decoder = make_decoder(obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers)
+# decoder = make_decoder(obs_shape, decoder_feature_dim, num_layers,
+#             num_filters, num_shared_layers)
 
 # print(decoder)
 
