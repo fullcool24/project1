@@ -146,6 +146,7 @@ class PixelDecoder(nn.Module):
 
 		self.feature_dim = feature_dim
 		self.num_layers = num_layers
+		self.num_filters = num_filters
 		self.num_shared_layers = num_shared_layers
 		self.out_dim = OUT_DIM[num_layers]
 
@@ -199,8 +200,6 @@ class PixelDecoder(nn.Module):
 		L.log_param('train_decoder/fc', self.fc, step)
 
 _AVAILABLE_DECODERS = {'pixel': PixelDecoder}
-
-
 
 
 
@@ -299,7 +298,7 @@ num_filters=32
 # print(from_enc.shape)
 # quit()
 
-decoder = make_decoder(obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers)
+decoder = make_decoder('pixel', obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers,)
 # decoder = make_decoder(obs_shape, decoder_feature_dim, num_layers,
 #             num_filters, num_shared_layers)
 
