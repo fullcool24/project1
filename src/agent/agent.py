@@ -1,3 +1,4 @@
+from cupshelpers import Device
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,6 +6,7 @@ import torch.nn.functional as F
 
 import utils
 from agent.encoder import make_encoder
+from agent.decoder import make_decoder
 
 LOG_FREQ = 10000
 
@@ -30,6 +32,13 @@ def make_agent(obs_shape, action_shape, args):
         encoder_feature_dim=args.encoder_feature_dim,
         encoder_lr=args.encoder_lr,
         encoder_tau=args.encoder_tau,
+        decoder_type=args.decoder_type,
+        decoder_feature_dim=args.decoder_feature_dim,
+        decoder_lr=args.decoder_lr,
+        decoder_update_freq=args.decoder_update_freq,
+        decoder_latent_lambda=args.decoder_latent_lambda,
+        decoder_weight_lambda=args.decoder_weight_lambda,
+        decoder_type=args.decoder_type,
         use_rot=args.use_rot,
         use_inv=args.use_inv,
         use_curl=args.use_curl,
@@ -95,6 +104,7 @@ class Actor(nn.Module):
 
         self.trunk = nn.Sequential(
             nn.Linear(self.encoder.feature_dim, hidden_dim), nn.ReLU(),
+            nn.Linear(self.decoder.feature_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, 2 * action_shape[0])
         )
@@ -248,6 +258,7 @@ class SacSSAgent(object):
         self,
         obs_shape,
         action_shape,
+        device,
         hidden_dim=256,
         discount=0.99,
         init_temperature=0.01,
@@ -265,6 +276,12 @@ class SacSSAgent(object):
         encoder_feature_dim=50,
         encoder_lr=1e-3,
         encoder_tau=0.005,
+        decoder_type='pixel',
+        decoder_lr=1e-3,
+        decoder_update_freq=1,
+        decoder_latent_lambda=0.0,
+        decoder_weight_lambda=0.0,
+        decoder_feature_dim=50,
         use_rot=False,
         use_inv=False,
         use_curl=False,
@@ -275,6 +292,7 @@ class SacSSAgent(object):
         num_filters=32,
         curl_latent_dim=128,
     ):
+        self.device = device
         self.discount = discount
         self.critic_tau = critic_tau
         self.encoder_tau = encoder_tau
@@ -285,6 +303,11 @@ class SacSSAgent(object):
         self.use_inv = use_inv
         self.use_curl = use_curl
         self.curl_latent_dim = curl_latent_dim
+        self.decoder_update_freq = decoder_update_freq
+        self.decoder_latent_lambda = decoder_latent_lambda
+        self.decoder_type = decoder_type
+        self.decoder_lr = decoder_lr
+        self.decoder_weight_lambda = decoder_weight_lambda
 
         assert num_layers >= num_shared_layers, 'num shared layers cannot exceed total amount'
 
@@ -321,6 +344,13 @@ class SacSSAgent(object):
         self.ss_encoder = None
         self.ss_decoder = None
 
+        self.decoder = None
+        if decoder_type != 'identity':
+            #create decoder
+            self.decoder = make_decoder(decoder_type, obs_shape, encoder_feature_dim, num_layers,
+            num_filters).cuda()
+            self.decoder.apply(weight_init)
+
         if use_rot or use_inv:
             self.ss_encoder = make_encoder(
                 obs_shape, encoder_feature_dim, num_layers,
@@ -328,7 +358,7 @@ class SacSSAgent(object):
             ).cuda()
             self.ss_encoder.copy_conv_weights_from(self.critic.encoder, num_shared_layers)
 
-            self.ss_decoder = make_decoder()
+            self.ss_decoder = make_decoder('pixel', obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers)
             
             # rotation
             if use_rot:
@@ -348,6 +378,13 @@ class SacSSAgent(object):
 
         # ss optimizers
         self.init_ss_optimizers(encoder_lr, ss_lr)
+
+        #optimizer for decoder
+        self.decoder_optimizer = torch.optim.Adam(
+            self.decoder.parameters(),
+            lr=decoder_lr,
+            weight_decay=decoder_weight_lambda
+        )
 
         # sac optimizers
         self.actor_optimizer = torch.optim.Adam(
@@ -390,6 +427,8 @@ class SacSSAgent(object):
         self.training = training
         self.actor.train(training)
         self.critic.train(training)
+        if self.decoder is not None:
+            self.decoder.train(training)
         if self.ss_encoder is not None:
             self.ss_encoder.train(training)
         if self.rot is not None:
@@ -488,23 +527,43 @@ class SacSSAgent(object):
 
         return rot_loss.item()
 
-    def update_dec(self, obs, L=None, step=None):
-        assert obs.shape[-1] == 84
-
+    def update_decoder(self, obs, target_obs, L=None, step=None):
         h = self.ss_encoder(obs)
-        recon = self.ss_decoder(h)
-        dec_los = F.loss(obs, recon)
-        # rot_loss = F.cross_entropy(pred_rotation, label)
 
+        if target_obs.dim() == 4:
+            # preprocess images to be in [-0.5, 0.5] range
+            target_obs = utils.preprocess_obs(target_obs)
+        rec_obs = self.decoder(h)
+        rec_loss = F.mse_loss(target_obs, rec_obs)
+
+        latent_loss = (0.5 * h.pow(2).sum(1)).mean()
+
+        loss = rec_loss + self.decoder_latent_lambda * latent_loss
+        self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
-        dec_los.backward()
+        loss.backward()
 
+        self.encoder_optimizer.step()
         self.decoder_optimizer.step()
+        L.log('train_ae/ae_loss', loss, step)
 
-        if L is not None:
-            L.log('train_rot/dec_los', dec_los, step)
+        self.decoder.log(L, step, log_freq=LOG_FREQ)
+        
+        # assert obs.shape[-1] == 84
 
-        return dec_los.item()
+        # recon = self.ss_decoder(h)
+        # dec_los = F.loss(obs, recon)
+        # # rot_loss = F.cross_entropy(pred_rotation, label)
+
+        # self.decoder_optimizer.zero_grad()
+        # dec_los.backward()
+
+        # self.decoder_optimizer.step()
+
+        # if L is not None:
+        #     L.log('train_rot/dec_los', dec_los, step)
+
+        # return dec_los.item()
 
     def update_inv(self, obs, next_obs, action, L=None, step=None):
         assert obs.shape[-1] == 84 and next_obs.shape[-1] == 84
