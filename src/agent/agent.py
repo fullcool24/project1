@@ -1,12 +1,11 @@
-from cupshelpers import Device
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
-from agent.encoder import make_encoder
-from agent.decoder import make_decoder
+from encoder import make_encoder
+from decoder import make_decoder
 
 LOG_FREQ = 10000
 
@@ -38,7 +37,6 @@ def make_agent(obs_shape, action_shape, args):
         decoder_update_freq=args.decoder_update_freq,
         decoder_latent_lambda=args.decoder_latent_lambda,
         decoder_weight_lambda=args.decoder_weight_lambda,
-        decoder_type=args.decoder_type,
         use_rot=args.use_rot,
         use_inv=args.use_inv,
         use_curl=args.use_curl,
