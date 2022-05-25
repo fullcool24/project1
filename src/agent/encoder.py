@@ -97,4 +97,3 @@ def make_encoder(
 	return PixelEncoder(
 		obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
 	)
-
