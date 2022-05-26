@@ -1,3 +1,4 @@
+from this import d
 import numpy as np
 import torch
 import torch.nn as nn
@@ -349,6 +350,13 @@ class SacSSAgent(object):
             num_filters).cuda()
             self.decoder.apply(weight_init)
 
+            #optimizer for decoder
+            self.decoder_optimizer = torch.optim.Adam(
+            self.decoder.parameters(),
+            lr=decoder_lr,
+            weight_decay=decoder_weight_lambda
+        )
+
         if use_rot or use_inv:
             self.ss_encoder = make_encoder(
                 obs_shape, encoder_feature_dim, num_layers,
@@ -376,13 +384,6 @@ class SacSSAgent(object):
 
         # ss optimizers
         self.init_ss_optimizers(encoder_lr, ss_lr)
-
-        #optimizer for decoder
-        self.decoder_optimizer = torch.optim.Adam(
-            self.decoder.parameters(),
-            lr=decoder_lr,
-            weight_decay=decoder_weight_lambda
-        )
 
         # sac optimizers
         self.actor_optimizer = torch.optim.Adam(
@@ -546,6 +547,8 @@ class SacSSAgent(object):
         L.log('train_ae/ae_loss', loss, step)
 
         self.decoder.log(L, step, log_freq=LOG_FREQ)
+
+        return rec_loss.item()
         
         # assert obs.shape[-1] == 84
 
@@ -635,6 +638,8 @@ class SacSSAgent(object):
                 self.critic.encoder, self.critic_target.encoder,
                 self.encoder_tau
             )
+        if self.decoder is not None and step % self.decoder_update_freq == 0:
+            self.update_decoder(obs, obs, L, step)
         
         if self.rot is not None and step % self.ss_update_freq == 0:
             self.update_rot(obs, L, step)
@@ -657,6 +662,11 @@ class SacSSAgent(object):
             torch.save(
                 self.rot.state_dict(),
                 '%s/rot_%s.pt' % (model_dir, step)
+            )
+        if self.decoder is not None:
+            torch.save(
+                self.decoder.state_dict(),
+                '%s/decoder_%s.pt' % (model_dir,step)
             )
         if self.inv is not None:
             torch.save(
@@ -684,6 +694,10 @@ class SacSSAgent(object):
         if self.rot is not None:
             self.rot.load_state_dict(
                 torch.load('%s/rot_%s.pt' % (model_dir, step))
+            )
+        if self.decoder is not None:
+            self.decoder.load_state_dict(
+                torch.load('%s/decoder_%s.pt' % (model_dir, step))
             )
         if self.inv is not None:
             self.inv.load_state_dict(
