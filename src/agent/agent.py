@@ -38,6 +38,7 @@ def make_agent(obs_shape, action_shape, args):
         decoder_update_freq=args.decoder_update_freq,
         decoder_latent_lambda=args.decoder_latent_lambda,
         decoder_weight_lambda=args.decoder_weight_lambda,
+        feature_dim=args.feature_dim,
         use_rot=args.use_rot,
         use_inv=args.use_inv,
         use_curl=args.use_curl,
@@ -96,6 +97,9 @@ class Actor(nn.Module):
         self.encoder = make_encoder(
             obs_shape, encoder_feature_dim, num_layers,
             num_filters, num_shared_layers
+        )
+
+        self.decoder = make_decoder( obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
         )
 
         self.log_std_min = log_std_min
@@ -304,8 +308,8 @@ class SacSSAgent(object):
         self.curl_latent_dim = curl_latent_dim
         self.decoder_update_freq = decoder_update_freq
         self.decoder_latent_lambda = decoder_latent_lambda
-        self.decoder_type = decoder_type
-        self.decoder_lr = decoder_lr
+        # self.decoder_type = decoder_type
+        # self.decoder_lr = decoder_lr
         self.decoder_weight_lambda = decoder_weight_lambda
 
         assert num_layers >= num_shared_layers, 'num shared layers cannot exceed total amount'
