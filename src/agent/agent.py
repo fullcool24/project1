@@ -33,7 +33,7 @@ def make_agent(obs_shape, action_shape, args):
         encoder_lr=args.encoder_lr,
         encoder_tau=args.encoder_tau,
         decoder_type=args.decoder_type,
-        decoder_feature_dim=args.decoder_feature_dim,
+        # decoder_feature_dim=args.decoder_feature_dim,
         decoder_lr=args.decoder_lr,
         decoder_update_freq=args.decoder_update_freq,
         decoder_latent_lambda=args.decoder_latent_lambda,
@@ -257,7 +257,7 @@ class SacSSAgent(object):
         self,
         obs_shape,
         action_shape,
-        device,
+        # device,
         hidden_dim=256,
         discount=0.99,
         init_temperature=0.01,
@@ -291,7 +291,7 @@ class SacSSAgent(object):
         num_filters=32,
         curl_latent_dim=128,
     ):
-        self.device = device
+        # self.device = device
         self.discount = discount
         self.critic_tau = critic_tau
         self.encoder_tau = encoder_tau
