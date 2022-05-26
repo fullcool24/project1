@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import utils
-from encoder import make_encoder
-from decoder import make_decoder
+from agent.encoder import make_encoder
+from agent.decoder import make_decoder
 
 LOG_FREQ = 10000
 

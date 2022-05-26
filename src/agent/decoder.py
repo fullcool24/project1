@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import numpy as np
 
-from encoder import OUT_DIM
+from agent.encoder import OUT_DIM
 
 
 class CenterCrop(nn.Module):

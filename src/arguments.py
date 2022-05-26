@@ -42,6 +42,14 @@ def parse_args():
 	parser.add_argument('--encoder_lr', default=1e-3, type=float)
 	parser.add_argument('--encoder_tau', default=0.05, type=float)
 
+	#decoder
+	parser.add_argument('--decoder_type', default='pixel', type=str)
+	parser.add_argument('--decoder_lr', default=1e-3, type=float)	
+	parser.add_argument('--decoder_update_freq', default=1, type=int)
+	parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
+	parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
+
+
 	# self-supervision
 	parser.add_argument('--use_rot', default=False, action='store_true') # rotation prediction
 	parser.add_argument('--use_inv', default=False, action='store_true') # inverse dynamics model
