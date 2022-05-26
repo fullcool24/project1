@@ -93,7 +93,7 @@ class PixelDecoder(nn.Module):
 _AVAILABLE_DECODERS = {'pixel': PixelDecoder}
 
 def make_decoder(
-	decoder_type, obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
+	decoder_type, obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers
 ):
 	assert decoder_type in _AVAILABLE_DECODERS
 	assert num_layers in OUT_DIM.keys(), 'invalid number of layers'
@@ -102,7 +102,7 @@ def make_decoder(
 	assert num_shared_layers <= num_layers and num_shared_layers > 0, \
 		f'invalid number of shared layers, received {num_shared_layers} layers'
 	return _AVAILABLE_DECODERS[decoder_type](
-		obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
+		obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers
 	)
 
 num_epochs = 5

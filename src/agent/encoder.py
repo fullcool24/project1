@@ -68,15 +68,15 @@ class PixelEncoder(nn.Module):
 				conv = conv.detach()
 
 		h = conv.view(conv.size(0), -1)
-		return h
+		return h, obs
 
 	def forward(self, obs, detach=False):
-		h = self.forward_conv(obs, detach)
+		h, processed_obs = self.forward_conv(obs, detach)
 		h_fc = self.fc(h)
 		h_norm = self.ln(h_fc)
 		out = torch.tanh(h_norm)
 
-		return out
+		return out, processed_obs
 
 	def copy_conv_weights_from(self, source, n=None):
 		"""Tie n first convolutional layers"""

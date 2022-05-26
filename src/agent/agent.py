@@ -33,12 +33,11 @@ def make_agent(obs_shape, action_shape, args):
         encoder_lr=args.encoder_lr,
         encoder_tau=args.encoder_tau,
         decoder_type=args.decoder_type,
-        # decoder_feature_dim=args.decoder_feature_dim,
+        decoder_feature_dim=args.decoder_feature_dim,
         decoder_lr=args.decoder_lr,
         decoder_update_freq=args.decoder_update_freq,
         decoder_latent_lambda=args.decoder_latent_lambda,
         decoder_weight_lambda=args.decoder_weight_lambda,
-        feature_dim=args.feature_dim,
         use_rot=args.use_rot,
         use_inv=args.use_inv,
         use_curl=args.use_curl,
@@ -90,7 +89,7 @@ class Actor(nn.Module):
     """MLP actor network."""
     def __init__(
         self, obs_shape, action_shape, hidden_dim,
-        encoder_feature_dim, log_std_min, log_std_max, num_layers, num_filters, num_shared_layers
+        decoder_feature_dim, encoder_feature_dim, log_std_min, log_std_max, num_layers, num_filters, num_shared_layers
     ):
         super().__init__()
 
@@ -99,7 +98,8 @@ class Actor(nn.Module):
             num_filters, num_shared_layers
         )
 
-        self.decoder = make_decoder( obs_shape, feature_dim, num_layers, num_filters, num_shared_layers
+        # decoder = make_decoder('pixel', obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers,)
+        self.decoder = make_decoder('pixel', obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers
         )
 
         self.log_std_min = log_std_min
@@ -107,7 +107,6 @@ class Actor(nn.Module):
 
         self.trunk = nn.Sequential(
             nn.Linear(self.encoder.feature_dim, hidden_dim), nn.ReLU(),
-            nn.Linear(self.decoder.feature_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
             nn.Linear(hidden_dim, 2 * action_shape[0])
         )
@@ -116,7 +115,7 @@ class Actor(nn.Module):
     def forward(
         self, obs, compute_pi=True, compute_log_pi=True, detach_encoder=False
     ):
-        obs = self.encoder(obs, detach=detach_encoder)
+        obs, _ = self.encoder(obs, detach=detach_encoder)
 
         mu, log_std = self.trunk(obs).chunk(2, dim=-1)
 
@@ -206,9 +205,9 @@ class CURL(nn.Module):
     def encode(self, x, detach=False, ema=False):
         if ema:
             with torch.no_grad():
-                z_out = self.encoder_target(x)
+                z_out, _ = self.encoder_target(x)
         else:
-            z_out = self.encoder(x)
+            z_out, _ = self.encoder(x)
 
         if detach:
             z_out = z_out.detach()
@@ -244,7 +243,7 @@ class Critic(nn.Module):
 
     def forward(self, obs, action, detach_encoder=False):
         # detach_encoder allows to stop gradient propogation to encoder
-        obs = self.encoder(obs, detach=detach_encoder)
+        obs, _ = self.encoder(obs, detach=detach_encoder)
 
         q1 = self.Q1(obs, action)
         q2 = self.Q2(obs, action)
@@ -316,7 +315,7 @@ class SacSSAgent(object):
 
         self.actor = Actor(
             obs_shape, action_shape, hidden_dim,
-            encoder_feature_dim, actor_log_std_min, actor_log_std_max,
+            decoder_feature_dim, encoder_feature_dim, actor_log_std_min, actor_log_std_max,
             num_layers, num_filters, num_layers
         ).cuda()
 
@@ -350,8 +349,8 @@ class SacSSAgent(object):
         self.decoder = None
         if decoder_type != 'identity':
             #create decoder
-            self.decoder = make_decoder(decoder_type, obs_shape, encoder_feature_dim, num_layers,
-            num_filters).cuda()
+            # decoder = make_decoder('pixel', obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers,)
+            self.decoder = make_decoder(decoder_type, obs_shape, decoder_feature_dim, num_layers, num_filters, num_shared_layers).cuda()
             self.decoder.apply(weight_init)
 
             #optimizer for decoder
@@ -514,7 +513,7 @@ class SacSSAgent(object):
         assert obs.shape[-1] == 84
 
         obs, label = utils.rotate(obs)
-        h = self.ss_encoder(obs)
+        h, _ = self.ss_encoder(obs)
         pred_rotation = self.rot(h)
         rot_loss = F.cross_entropy(pred_rotation, label)
 
@@ -531,13 +530,9 @@ class SacSSAgent(object):
         return rot_loss.item()
 
     def update_decoder(self, obs, target_obs, L=None, step=None):
-        h = self.ss_encoder(obs)
-
-        if target_obs.dim() == 4:
-            # preprocess images to be in [-0.5, 0.5] range
-            target_obs = utils.preprocess_obs(target_obs)
+        h, processed_obs = self.ss_encoder(obs)
         rec_obs = self.decoder(h)
-        rec_loss = F.mse_loss(target_obs, rec_obs)
+        rec_loss = F.mse_loss(processed_obs, rec_obs)
 
         latent_loss = (0.5 * h.pow(2).sum(1)).mean()
 
@@ -573,8 +568,8 @@ class SacSSAgent(object):
     def update_inv(self, obs, next_obs, action, L=None, step=None):
         assert obs.shape[-1] == 84 and next_obs.shape[-1] == 84
 
-        h = self.ss_encoder(obs)
-        h_next = self.ss_encoder(next_obs)
+        h, _ = self.ss_encoder(obs)
+        h_next, _ = self.ss_encoder(next_obs)
 
         pred_action = self.inv(h, h_next)
         inv_loss = F.mse_loss(pred_action, action)

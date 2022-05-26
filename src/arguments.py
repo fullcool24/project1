@@ -48,7 +48,7 @@ def parse_args():
 	parser.add_argument('--decoder_update_freq', default=1, type=int)
 	parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
 	parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
-	parser.add_argument('decoder_feature_dim', default=100, type=int)
+	parser.add_argument('--decoder_feature_dim', default=100, type=int)
 
 
 	# self-supervision
